@@ -495,14 +495,33 @@ If INCLUSIVE is t, the text object is inclusive."
   :prefix ","
   :states '(normal visual))
 
+(defvar my-web-mode-element-rename-previous-tag nil
+  "Used by my-rename-thing-at-point.")
+
+(defun my-detect-new-html-tag (flag)
+  (cond
+   ((eq flag 'pre)
+    (message "str=%s" (buffer-string (line-beginning-position) (line-end-position))))
+   ((eq flag 'post)
+    (message "str=%s" (buffer-string (line-beginning-position) (line-end-position))))))
+(push '(rename-html-tag my-detect-new-html-tag) evil-repeat-types)
+(evil-set-command-property #'web-mode-element-rename :repeat 'rename-html-tag)
+
 (defun my-rename-thing-at-point (&optional n)
   "Rename thing at point.
-If N > 0, only occurrences in current N lines are renamed."
+If N > 0 and working on HTML, repeating previous tag name operation.
+If N > 0 and working on javascript, only occurrences in current N lines are renamed."
   (interactive "P")
   (cond
+   ((eq major-mode 'web-mode)
+     (unless (and n my-web-mode-element-rename-previous-tag)
+       (setq my-web-mode-element-rename-previous-tag (read-string "New tag name? ")))
+     (web-mode-element-rename my-web-mode-element-rename-previous-tag))
+
    ((derived-mode-p 'js2-mode)
     ;; use `js2-mode' parser, much smarter and works in any scope
     (js2hl-rename-thing-at-point n))
+
    (t
     ;; simple string search/replace in function scope
     (evilmr-replace-in-defun))))
@@ -520,6 +539,34 @@ If N > 0, only occurrences in current N lines are renamed."
 
    (t
     (message "Can only beautify code written in python/javascript"))))
+
+(defun my-open-pdf-from-history ()
+  "Open pdf and go to page from history."
+  (interactive)
+  (let* ((link (completing-read "Open pdf:::page: " my-pdf-view-from-history)))
+    (when link
+      (let* ((items (split-string link ":::"))
+             (pdf-file (nth 0 items))
+             (pdf-page (string-to-number (nth 1 items))))
+        (my-ensure 'org)
+        (my-focus-on-pdf-window-then-back
+         (lambda (pdf-file)
+           (when (string= (file-name-base pdf-file) (file-name-base pdf-file))
+             (my-pdf-view-goto-page pdf-page))))))))
+
+(defun my-open-pdf-next-page (&optional n)
+  "Open pdf and go to next N page."
+  (interactive "p")
+  (my-focus-on-pdf-window-then-back
+   (lambda (pdf-file)
+     (pdf-view-next-page n))))
+
+(defun my-open-pdf-previous-page (&optional n)
+  "Open pdf and go to next N page."
+  (interactive "p")
+  (my-focus-on-pdf-window-then-back
+   (lambda (pdf-file)
+     (pdf-view-previous-page n))))
 
 (my-comma-leader-def
   "," 'evilnc-comment-operator
@@ -768,6 +815,9 @@ If N > 0, only occurrences in current N lines are renamed."
   ;;    (set-face-attribute 'avy-lead-face-0 nil :foreground "black")
   ;;    (set-face-attribute 'avy-lead-face-0 nil :background "#f86bf3"))
   ";" 'ace-pinyin-jump-char-2
+  "f" 'my-open-pdf-from-history
+  "n" 'my-open-pdf-next-page
+  "p" 'my-open-pdf-previous-page
   "w" 'avy-goto-word-or-subword-1
   "a" 'avy-goto-char-timer
   "db" 'sdcv-search-input ; details
@@ -932,12 +982,5 @@ If N > 0, only occurrences in current N lines are renamed."
   ;; Cursor is always black because of evil.
   ;; Here is the workaround
   (setq evil-default-cursor t))
-
-(with-eval-after-load 'web-mode
-  (mapc #'evil-declare-change-repeat
-        '(web-mode-element-rename))
-  ;; (mapc #'evil-declare-repeat
-  ;;       '(web-mode-element-rename))
-  )
 
 (provide 'init-evil)
